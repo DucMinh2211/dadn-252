@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import { Thermometer, Wind, Droplets, Fan, Snowflake, Flame } from 'lucide-react';
+import { Thermometer, Wind, Droplets, Fan, Snowflake, Flame, Plus, Trash2, Edit } from 'lucide-react';
 import { Card } from './ui/card';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 
 interface ClimateZone {
   id: string;
@@ -60,10 +64,52 @@ export function Climate() {
     },
   ]);
 
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingZone, setEditingZone] = useState<ClimateZone | null>(null);
+  const [newZone, setNewZone] = useState({
+    name: '',
+  });
+
   const updateZone = (id: string, updates: Partial<ClimateZone>) => {
     setZones(zones.map(zone => 
       zone.id === id ? { ...zone, ...updates } : zone
     ));
+  };
+
+  const handleAddZone = () => {
+    const zone: ClimateZone = {
+      id: String(Date.now()),
+      name: newZone.name,
+      temperature: 22,
+      targetTemp: 22,
+      humidity: 45,
+      mode: 'auto',
+      fanSpeed: 2,
+      active: false,
+    };
+    setZones([...zones, zone]);
+    setNewZone({ name: '' });
+    setIsAddDialogOpen(false);
+  };
+
+  const handleDeleteZone = (id: string) => {
+    setZones(zones.filter(z => z.id !== id));
+  };
+
+  const handleEditZone = (zone: ClimateZone) => {
+    setEditingZone(zone);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (editingZone) {
+      setZones(zones.map(z => 
+        z.id === editingZone.id ? editingZone : z
+      ));
+      setIsEditDialogOpen(false);
+      setEditingZone(null);
+    }
   };
 
   const getModeIcon = (mode: string) => {
@@ -271,8 +317,119 @@ export function Climate() {
                 </TabsContent>
               </Tabs>
             )}
+
+            <div className="flex gap-2 mt-4 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex-1"
+                onClick={() => handleEditZone(zone)}
+              >
+                <Edit className="w-4 h-4 mr-1" />
+                Edit
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleDeleteZone(zone.id)}
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </Button>
+            </div>
           </Card>
         ))}
+      </div>
+
+      {/* Add Zone Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add Climate Zone</DialogTitle>
+            <DialogDescription>
+              Add a new climate zone to your system.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={newZone.name}
+                onChange={(e) => setNewZone({ name: e.target.value })}
+                placeholder="Living Room"
+              />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="ml-2"
+              onClick={handleAddZone}
+              disabled={!newZone.name}
+            >
+              Add
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Zone Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Climate Zone</DialogTitle>
+            <DialogDescription>
+              Edit the details of this climate zone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={editingZone?.name || ''}
+                onChange={(e) => setEditingZone({ ...editingZone!, name: e.target.value })}
+                placeholder="Living Room"
+              />
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="ml-2"
+              onClick={handleSaveEdit}
+              disabled={!editingZone?.name}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Zone Button */}
+      <div className="mt-8">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setIsAddDialogOpen(true)}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add Climate Zone
+        </Button>
       </div>
     </div>
   );
