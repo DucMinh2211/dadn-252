@@ -51,10 +51,10 @@ def message(client, feed_id, payload):
 print("Dang khoi dong tram Gateway Python ...")
 
 client = MQTTClient(AIO_USERNAME, AIO_KEY)
-client.on_connect = connected
-client.on_disconnect = disconnected
-client.on_message = message
-client.on_subscribe = subscribe
+client.on_connect = connected # type: ignore
+client.on_disconnect = disconnected # type: ignore
+client.on_message = message # type: ignore
+client.on_subscribe = subscribe # type: ignore
 
 client.connect()
 client.loop_background()

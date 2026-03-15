@@ -1,0 +1,40 @@
+# Node.js
+node_modules/
+dist/
+build/
+*.log
+.npm
+.eslintcache
+
+# Vite
+.vite/
+.vite-temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+.pytest_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local Python libs (optional: if you want to keep them in repo, leave commented)
+# pythongateway/python_libs-IoT_CoBan_64bit-v3.8/libs/
+# pythongateway/python_libs-IoT_CoBan_64bit-v3.8/envLibs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
