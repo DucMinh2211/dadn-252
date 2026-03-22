@@ -6,7 +6,7 @@ from Adafruit_IO import MQTTClient
 
 # --- 1. THONG TIN TAI KHOAN ADAFRUIT ---
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "tren zalo"
+AIO_KEY = "aio_EEBM90yP59FuAZhC94WAJ5BeBkdY"
 
 # --- 2. THONG TIN KET NOI DATABASE ---
 DB_CONFIG = {
