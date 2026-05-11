@@ -24,7 +24,7 @@ DB_CONFIG = {
 }
 
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "NHAP_KEY_VAO_DAY"
+AIO_KEY = "aio_qXdO16KoYp30YtjNs5ALnKuDD5Os"
 
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)
@@ -102,7 +102,10 @@ def control_device(cmd: DeviceCommand):
         
         response = requests.post(aio_url, headers=headers, json=payload)
         if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="Khong the day lenh xuong Adafruit")
+            # In thẳng lỗi của Adafruit ra để bắt bệnh
+            error_msg = f"Lỗi Adafruit ({response.status_code}): {response.text}"
+            print(error_msg) # In ra Terminal
+            raise HTTPException(status_code=500, detail=error_msg) # Ném lên Web
 
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM feeds WHERE feed_name = %s", (cmd.feed_name,))

@@ -1,435 +1,198 @@
-import { useState } from 'react';
-import { Thermometer, Wind, Droplets, Fan, Snowflake, Flame, Plus, Trash2, Edit } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Thermometer, Wind, Fan, Settings2, Power, AlertCircle } from 'lucide-react';
 import { Card } from './ui/card';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-
-interface ClimateZone {
-  id: string;
-  name: string;
-  temperature: number;
-  targetTemp: number;
-  humidity: number;
-  mode: 'heating' | 'cooling' | 'auto' | 'off';
-  fanSpeed: number;
-  active: boolean;
-}
 
 export function Climate() {
-  const [zones, setZones] = useState<ClimateZone[]>([
-    { 
-      id: '1', 
-      name: 'Living Room', 
-      temperature: 22, 
-      targetTemp: 22,
-      humidity: 45, 
-      mode: 'auto',
-      fanSpeed: 2,
-      active: true 
-    },
-    { 
-      id: '2', 
-      name: 'Bedroom', 
-      temperature: 20, 
-      targetTemp: 20,
-      humidity: 50, 
-      mode: 'cooling',
-      fanSpeed: 1,
-      active: true 
-    },
-    { 
-      id: '3', 
-      name: 'Kitchen', 
-      temperature: 23, 
-      targetTemp: 22,
-      humidity: 42, 
-      mode: 'cooling',
-      fanSpeed: 3,
-      active: true 
-    },
-    { 
-      id: '4', 
-      name: 'Office', 
-      temperature: 21, 
-      targetTemp: 21,
-      humidity: 48, 
-      mode: 'auto',
-      fanSpeed: 2,
-      active: false 
-    },
-  ]);
+  // Trạng thái hệ thống
+  const [isSystemActive, setIsSystemActive] = useState(true);
+  const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+  
+  // Dữ liệu môi trường thật từ API
+  const [currentTemp, setCurrentTemp] = useState(25);
+  
+  // Thông số cài đặt
+  const [targetTemp, setTargetTemp] = useState(30); // Ngưỡng nhiệt độ người dùng set
+  const [fanSpeed, setFanSpeed] = useState(0);      // Tốc độ quạt (0 - 100)
 
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingZone, setEditingZone] = useState<ClimateZone | null>(null);
-  const [newZone, setNewZone] = useState({
-    name: '',
-  });
+  // Dùng useRef để tránh việc Frontend gửi lệnh liên tục lên API làm treo hệ thống
+  const prevAutoState = useRef<boolean | null>(null);
 
-  const updateZone = (id: string, updates: Partial<ClimateZone>) => {
-    setZones(zones.map(zone => 
-      zone.id === id ? { ...zone, ...updates } : zone
-    ));
+  // Hàm gửi lệnh xuống Quạt (Adafruit)
+  const sendFanCommand = async (speedVal: string) => {
+    try {
+      await fetch('http://127.0.0.1:8000/api/device-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          feed_name: 'bbc-fan',
+          value: speedVal
+        })
+      });
+      console.log(`Đã gửi lệnh quạt: ${speedVal}%`);
+    } catch (error) {
+      console.error("Lỗi điều khiển quạt:", error);
+    }
   };
 
-  const handleAddZone = () => {
-    const zone: ClimateZone = {
-      id: String(Date.now()),
-      name: newZone.name,
-      temperature: 22,
-      targetTemp: 22,
-      humidity: 45,
-      mode: 'auto',
-      fanSpeed: 2,
-      active: false,
+  // EFFECT 1: Lấy nhiệt độ thật mỗi 3 giây
+  useEffect(() => {
+    const fetchTemp = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/sensor/latest');
+        const result = await res.json();
+        if (result.status === 'success') {
+          result.data.forEach((item: any) => {
+            if (item.feed_name === 'bbc-temp') {
+              setCurrentTemp(Number(item.value));
+            }
+          });
+        }
+      } catch (error) {
+        console.log("Đang chờ dữ liệu nhiệt độ...");
+      }
     };
-    setZones([...zones, zone]);
-    setNewZone({ name: '' });
-    setIsAddDialogOpen(false);
-  };
+    
+    fetchTemp();
+    const interval = setInterval(fetchTemp, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleDeleteZone = (id: string) => {
-    setZones(zones.filter(z => z.id !== id));
-  };
-
-  const handleEditZone = (zone: ClimateZone) => {
-    setEditingZone(zone);
-    setIsEditDialogOpen(true);
-  };
-
-  const handleSaveEdit = () => {
-    if (editingZone) {
-      setZones(zones.map(z => 
-        z.id === editingZone.id ? editingZone : z
-      ));
-      setIsEditDialogOpen(false);
-      setEditingZone(null);
+  // EFFECT 2: Xử lý logic AUTO (Tự động bật/tắt quạt theo ngưỡng)
+  useEffect(() => {
+    if (isSystemActive && mode === 'auto') {
+      const shouldFanBeOn = currentTemp > targetTemp;
+      
+      // Chỉ gửi API nếu trạng thái cần thay đổi (từ Tắt -> Bật hoặc Bật -> Tắt)
+      if (prevAutoState.current !== shouldFanBeOn) {
+        const speedVal = shouldFanBeOn ? "100" : "0";
+        sendFanCommand(speedVal);
+        setFanSpeed(shouldFanBeOn ? 100 : 0);
+        prevAutoState.current = shouldFanBeOn;
+      }
     }
-  };
+  }, [currentTemp, targetTemp, isSystemActive, mode]);
 
-  const getModeIcon = (mode: string) => {
-    switch (mode) {
-      case 'heating': return <Flame className="w-5 h-5 text-orange-500" />;
-      case 'cooling': return <Snowflake className="w-5 h-5 text-blue-500" />;
-      case 'auto': return <Thermometer className="w-5 h-5 text-green-500" />;
-      default: return <Wind className="w-5 h-5 text-gray-400" />;
+  // EFFECT 3: Xử lý logic MANUAL (Tránh spam API khi người dùng kéo thanh trượt)
+  useEffect(() => {
+    if (isSystemActive && mode === 'manual') {
+      const timer = setTimeout(() => {
+        sendFanCommand(fanSpeed.toString());
+      }, 500); // Chờ 0.5s sau khi ngừng kéo mới gửi API
+      return () => clearTimeout(timer);
     }
-  };
+  }, [fanSpeed, mode, isSystemActive]);
 
-  const getModeColor = (mode: string) => {
-    switch (mode) {
-      case 'heating': return 'from-orange-50 to-red-50';
-      case 'cooling': return 'from-blue-50 to-cyan-50';
-      case 'auto': return 'from-green-50 to-emerald-50';
-      default: return 'from-gray-50 to-gray-100';
+  // Xử lý khi tắt toàn bộ hệ thống
+  const handleSystemToggle = (checked: boolean) => {
+    setIsSystemActive(checked);
+    if (!checked) {
+      sendFanCommand("0");
+      setFanSpeed(0);
+      prevAutoState.current = false;
     }
   };
 
   return (
     <div className="p-8">
-      <div className="mb-8">
-        <h2 className="text-3xl mb-2 flex items-center gap-3">
-          <Thermometer className="w-8 h-8 text-blue-500" />
-          Climate Control
-        </h2>
-        <p className="text-gray-500">Manage temperature and air quality</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl mb-2 flex items-center gap-3">
+            <Wind className="w-8 h-8 text-cyan-500" />
+            Smart Fan Control
+          </h2>
+          <p className="text-gray-500">Living Room - Temperature & Fan Management</p>
+        </div>
+        <div className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border">
+          <Power className={`w-5 h-5 ${isSystemActive ? 'text-green-500' : 'text-gray-400'}`} />
+          <span className="font-semibold">{isSystemActive ? 'System ON' : 'System OFF'}</span>
+          <Switch checked={isSystemActive} onCheckedChange={handleSystemToggle} className="ml-2" />
+        </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Average Temperature</p>
-              <p className="text-2xl font-semibold">
-                {(zones.reduce((acc, z) => acc + z.temperature, 0) / zones.length).toFixed(1)}°C
-              </p>
-            </div>
-            <Thermometer className="w-10 h-10 text-blue-500" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Average Humidity</p>
-              <p className="text-2xl font-semibold">
-                {Math.round(zones.reduce((acc, z) => acc + z.humidity, 0) / zones.length)}%
-              </p>
-            </div>
-            <Droplets className="w-10 h-10 text-cyan-500" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Active Zones</p>
-              <p className="text-2xl font-semibold">
-                {zones.filter(z => z.active).length}/{zones.length}
-              </p>
-            </div>
-            <Wind className="w-10 h-10 text-green-500" />
-          </div>
-        </Card>
-      </div>
-
-      {/* Climate Zones */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {zones.map(zone => (
-          <Card key={zone.id} className={`p-6 bg-gradient-to-br ${getModeColor(zone.mode)}`}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                {getModeIcon(zone.mode)}
-                <div>
-                  <h3 className="text-xl font-semibold">{zone.name}</h3>
-                  <p className="text-sm text-gray-600 capitalize">{zone.mode} mode</p>
+        {/* THẺ HIỂN THỊ NHIỆT ĐỘ */}
+        <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 relative overflow-hidden">
+          <div className="absolute -right-4 -top-4 opacity-10">
+            <Thermometer className="w-48 h-48" />
+          </div>
+          <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+            <Thermometer className="w-6 h-6 text-blue-500" />
+            Current Environment
+          </h3>
+          <div className="flex items-end gap-4">
+            <span className="text-6xl font-bold text-blue-900">{currentTemp.toFixed(1)}</span>
+            <span className="text-2xl text-blue-600 font-semibold mb-2">°C</span>
+          </div>
+          <div className="mt-6 flex items-center gap-2 text-sm text-blue-800 bg-blue-100 p-3 rounded-md w-fit">
+            <Fan className={`w-4 h-4 ${fanSpeed > 0 ? 'animate-spin' : ''}`} />
+            Fan Status: <span className="font-bold">{fanSpeed > 0 ? `Running (${fanSpeed}%)` : 'Stopped'}</span>
+          </div>
+        </Card>
+
+        {/* THẺ ĐIỀU KHIỂN */}
+        <Card className={`p-6 transition-opacity ${!isSystemActive ? 'opacity-50 pointer-events-none' : ''}`}>
+          <Tabs value={mode} onValueChange={(v) => setMode(v as 'auto' | 'manual')} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="auto" className="flex items-center gap-2">
+                <Settings2 className="w-4 h-4" /> AUTO
+              </TabsTrigger>
+              <TabsTrigger value="manual" className="flex items-center gap-2">
+                <Fan className="w-4 h-4" /> MANUAL
+              </TabsTrigger>
+            </TabsList>
+
+            {/* TAB TỰ ĐỘNG */}
+            <TabsContent value="auto" className="space-y-6">
+              <div className="bg-slate-50 p-4 rounded-lg border">
+                <div className="flex items-center gap-2 text-slate-700 mb-2">
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
+                  <span className="font-medium">Auto Cooling Rule</span>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  Fan will automatically turn on to 100% when room temperature exceeds your target.
+                </p>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-semibold text-gray-600">Target Temperature</span>
+                  <span className="text-2xl font-bold text-amber-600">{targetTemp}°C</span>
+                </div>
+                <Slider
+                  value={[targetTemp]}
+                  onValueChange={(vals) => setTargetTemp(vals[0])}
+                  min={20}
+                  max={40}
+                  step={1}
+                  className="py-4"
+                />
+              </div>
+            </TabsContent>
+
+            {/* TAB CHỈNH TAY */}
+            <TabsContent value="manual" className="space-y-6">
+              <div className="bg-slate-50 p-4 rounded-lg border">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-semibold text-gray-600">Fan Speed</span>
+                  <span className="text-2xl font-bold text-cyan-600">{fanSpeed}%</span>
+                </div>
+                <Slider
+                  value={[fanSpeed]}
+                  onValueChange={(vals) => setFanSpeed(vals[0])}
+                  min={0}
+                  max={100}
+                  step={10}
+                  className="py-4"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium">
+                  <span>0% (OFF)</span>
+                  <span>50%</span>
+                  <span>100% (MAX)</span>
                 </div>
               </div>
-              <Switch 
-                checked={zone.active}
-                onCheckedChange={(checked) => updateZone(zone.id, { active: checked })}
-              />
-            </div>
-
-            {zone.active && (
-              <Tabs defaultValue="temperature" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 mb-4">
-                  <TabsTrigger value="temperature">Temperature</TabsTrigger>
-                  <TabsTrigger value="mode">Mode</TabsTrigger>
-                  <TabsTrigger value="fan">Fan</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="temperature" className="space-y-4">
-                  <div className="bg-white/50 rounded-lg p-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Current</p>
-                        <p className="text-3xl font-bold">{zone.temperature}°C</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-gray-600">Target</p>
-                        <p className="text-3xl font-bold">{zone.targetTemp}°C</p>
-                      </div>
-                    </div>
-                    <Slider
-                      value={[zone.targetTemp]}
-                      onValueChange={(vals) => updateZone(zone.id, { targetTemp: vals[0] })}
-                      min={16}
-                      max={30}
-                      step={0.5}
-                    />
-                  </div>
-
-                  <div className="bg-white/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Droplets className="w-5 h-5 text-cyan-600" />
-                        <span>Humidity</span>
-                      </div>
-                      <span className="font-semibold">{zone.humidity}%</span>
-                    </div>
-                    <div className="mt-2 flex gap-1">
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <div 
-                          key={i}
-                          className={`flex-1 h-2 rounded ${
-                            i < Math.floor(zone.humidity / 10) ? 'bg-cyan-500' : 'bg-gray-300'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="mode" className="space-y-3">
-                  {['heating', 'cooling', 'auto', 'off'].map(mode => (
-                    <button
-                      key={mode}
-                      onClick={() => updateZone(zone.id, { mode: mode as any })}
-                      className={`w-full p-4 rounded-lg text-left transition-all ${
-                        zone.mode === mode 
-                          ? 'bg-white ring-2 ring-indigo-500 shadow-md' 
-                          : 'bg-white/50 hover:bg-white/70'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          {mode === 'heating' && <Flame className="w-5 h-5 text-orange-500" />}
-                          {mode === 'cooling' && <Snowflake className="w-5 h-5 text-blue-500" />}
-                          {mode === 'auto' && <Thermometer className="w-5 h-5 text-green-500" />}
-                          {mode === 'off' && <Wind className="w-5 h-5 text-gray-400" />}
-                          <span className="capitalize font-medium">{mode}</span>
-                        </div>
-                        {zone.mode === mode && (
-                          <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </TabsContent>
-
-                <TabsContent value="fan" className="space-y-4">
-                  <div className="bg-white/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Fan className="w-5 h-5 text-indigo-600" />
-                        <span>Fan Speed</span>
-                      </div>
-                      <span className="font-semibold">Level {zone.fanSpeed}</span>
-                    </div>
-                    <Slider
-                      value={[zone.fanSpeed]}
-                      onValueChange={(vals) => updateZone(zone.id, { fanSpeed: vals[0] })}
-                      min={1}
-                      max={5}
-                      step={1}
-                    />
-                    <div className="flex justify-between text-xs text-gray-500 mt-2">
-                      <span>Low</span>
-                      <span>High</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-white/50 rounded-lg p-4">
-                    <p className="text-sm text-gray-600 mb-2">Air Quality</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex gap-1">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <div 
-                              key={i}
-                              className={`flex-1 h-3 rounded ${
-                                i < 4 ? 'bg-green-500' : 'bg-gray-300'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <span className="ml-4 text-green-600 font-medium">Good</span>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            )}
-
-            <div className="flex gap-2 mt-4 pt-4 border-t">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="flex-1"
-                onClick={() => handleEditZone(zone)}
-              >
-                <Edit className="w-4 h-4 mr-1" />
-                Edit
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => handleDeleteZone(zone.id)}
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Add Zone Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add Climate Zone</DialogTitle>
-            <DialogDescription>
-              Add a new climate zone to your system.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={newZone.name}
-                onChange={(e) => setNewZone({ name: e.target.value })}
-                placeholder="Living Room"
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="ml-2"
-              onClick={handleAddZone}
-              disabled={!newZone.name}
-            >
-              Add
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Zone Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Climate Zone</DialogTitle>
-            <DialogDescription>
-              Edit the details of this climate zone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={editingZone?.name || ''}
-                onChange={(e) => setEditingZone({ ...editingZone!, name: e.target.value })}
-                placeholder="Living Room"
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="ml-2"
-              onClick={handleSaveEdit}
-              disabled={!editingZone?.name}
-            >
-              Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Zone Button */}
-      <div className="mt-8">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setIsAddDialogOpen(true)}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Climate Zone
-        </Button>
+            </TabsContent>
+          </Tabs>
+        </Card>
       </div>
     </div>
   );

@@ -1,25 +1,25 @@
 import sys
 import time
+from datetime import datetime
 import mysql.connector
 from mysql.connector import Error
 from Adafruit_IO import MQTTClient
 
-# --- 1. THONG TIN TAI KHOAN ADAFRUIT ---
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "NHAP_KEY_VAO_DAY"
+AIO_KEY = "aio_qXdO16KoYp30YtjNs5ALnKuDD5Os" 
 
-# --- 2. THONG TIN KET NOI DATABASE ---
 DB_CONFIG = {
     'host': '127.0.0.1',
     'database': 'dadn_smarthome',
     'user': 'root',
-    'password': '123456' # Nhớ đổi pass tùy theo máy các ông nhé
+    'password': '123456'
 }
 
-# Khai báo các kênh dữ liệu
-FEEDS = ["bbc-temp", "bbc-moist", "bbc-move", "bbc-led", "bbc-fan", "bbc-remote"]
+FEEDS = ["bbc-temp", "bbc-moist", "bbc-move", "bbc-lisen", "bbc-led1", "bbc-led2", "bbc-fan", "bbc-remote"]
 
-# --- 3. HAM KET NOI DATABASE ---
+last_motion_stop_time = 0
+motion_detected = False
+
 def get_db_connection():
     try:
         connection = mysql.connector.connect(**DB_CONFIG)
@@ -29,7 +29,6 @@ def get_db_connection():
         print(f"Loi ket noi MySQL: {e}")
     return None
 
-# --- 4. CAC HAM XU LY MQTT ---
 def connected(client):
     print("Ket noi thanh cong den may chu Adafruit IO ...")
     for feed in FEEDS:
@@ -43,22 +42,18 @@ def disconnected(client):
     sys.exit(1)
 
 def message(client, feed_id, payload):
+    global last_motion_stop_time, motion_detected
     print(f"[Nhan du lieu] Kenh: {feed_id} ---> Gia tri: {payload}")
     
-    # KẾT NỐI DB ĐỂ LƯU DỮ LIỆU
     conn = get_db_connection()
     if conn is not None:
         try:
             cursor = conn.cursor()
-            
-            # B1: Lấy id của feed dựa vào feed_name 
             cursor.execute("SELECT id FROM feeds WHERE feed_name = %s", (feed_id,))
             result = cursor.fetchone()
             
             if result:
                 db_feed_id = result[0]
-                
-                # B2: Lưu vào bảng sensor_data 
                 insert_query = "INSERT INTO sensor_data (feed_id, value) VALUES (%s, %s)"
                 cursor.execute(insert_query, (db_feed_id, float(payload) if payload.replace('.','',1).isdigit() else payload))
                 conn.commit()
@@ -71,21 +66,35 @@ def message(client, feed_id, payload):
                 cursor.close()
                 conn.close()
 
-    # Kịch bản 1 : Xử lý Nhiệt độ
-    if feed_id == "bbc-temp":
+    
+
+    if feed_id == "bbc-lisen":
         try:
-            nhiet_do = float(payload) 
-            if nhiet_do >= 35:
-                print("He thong tu dong ra lenh BAT QUAT!")
-                client.publish("bbc-fan", "100") 
-            elif nhiet_do <= 30:
-                print("He thong tu dong ra lenh TAT QUAT!")
-                client.publish("bbc-fan", "0")
+            anh_sang = float(payload)
+            if anh_sang < 30:
+                print("Tối quá! Tự động BẬT đèn Outside (bbc-led1).")
+                client.publish("bbc-led1", "1")
+            elif anh_sang > 50:
+                print("Trời sáng! Tự động TẮT đèn Outside (bbc-led1).")
+                client.publish("bbc-led1", "0")
         except ValueError:
             pass
 
+    if feed_id == "bbc-move":
+        try:
+            move_val = int(float(payload))
+            if move_val == 1:
+                print("Có người! BẬT đèn Main (bbc-led2) và hủy đếm ngược.")
+                client.publish("bbc-led2", "1")
+                motion_detected = True
+                last_motion_stop_time = 0 # Xóa mốc thời gian tắt
+            elif move_val == 0:
+                print("Hết người! Bắt đầu đếm ngược 10s để tắt đèn.")
+                motion_detected = False
+                last_motion_stop_time = time.time() # Lưu lại thời điểm đồng hồ lúc vừa hết người
+        except ValueError:
+            pass
 
-# --- 5. KHOI TAO VA CHAY CHUONG TRINH ---
 print("Dang khoi dong tram Gateway Python ...")
 
 client = MQTTClient(AIO_USERNAME, AIO_KEY)
@@ -99,7 +108,23 @@ client.loop_background()
 
 try:
     while True:
-        time.sleep(1)
+        now = datetime.now()
+        
+        if not motion_detected and last_motion_stop_time > 0:
+            if time.time() - last_motion_stop_time >= 10:
+                print("Đã qua 10s không có chuyển động. Tự động TẮT đèn Main (bbc-led2)!")
+                client.publish("bbc-led2", "0")
+                last_motion_stop_time = 0 # Khóa lại bộ đếm để không bị spam lệnh tắt
+
+        # --- CHẾ ĐỘ ĐI NGỦ: TẮT HẾT ĐÈN ---
+        if now.hour == 22 and now.minute == 0:
+            print("Đã 22:00 - Chế độ đi ngủ: Tự động TẮT hết đèn!")
+            client.publish("bbc-led1", "0") 
+            client.publish("bbc-led2", "0") 
+            time.sleep(60)
+        else:
+            time.sleep(1) # Nghỉ 1 giây để đỡ hao tài nguyên CPU
+            
 except KeyboardInterrupt:
     print("Dung chuong trinh...")
     sys.exit(0)
