@@ -6,7 +6,7 @@ from mysql.connector import Error
 from Adafruit_IO import MQTTClient
 
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "aio_qXdO16KoYp30YtjNs5ALnKuDD5Os" 
+AIO_KEY = "tự copy vô nhé " #aio_qXdO16KoYp30YtjNs5ALnKuDD5Os
 
 DB_CONFIG = {
     'host': '127.0.0.1',
