@@ -37,10 +37,33 @@ export function Lights() {
     room: 'Living Room',
   });
 
-  const toggleLight = (id: string) => {
-    setLights(lights.map(light => 
-      light.id === id ? { ...light, on: !light.on } : light
-    ));
+  const toggleLight = async (id: string) => {
+    const light = lights.find(l => l.id === id);
+    if (!light) return;
+
+    const newState = !light.on; // Trạng thái mới (Bật/Tắt)
+
+    setLights(lights.map(l => l.id === id ? { ...l, on: newState } : l));
+
+    if (light.id === '3') {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/device-control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            feed_name: "bbc-led", 
+            value: newState ? "1" : "0" 
+          })
+        });
+        const result = await response.json();
+        if(result.status === 'success') {
+           console.log("Đã bật/tắt đèn thật thành công!");
+        }
+      } catch (error) {
+        console.error("Lỗi điều khiển đèn:", error);
+        setLights(lights.map(l => l.id === id ? { ...l, on: light.on } : l));
+      }
+    }
   };
 
   const setBrightness = (id: string, brightness: number) => {

@@ -6,14 +6,14 @@ from Adafruit_IO import MQTTClient
 
 # --- 1. THONG TIN TAI KHOAN ADAFRUIT ---
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "aio_EEBM90yP59FuAZhC94WAJ5BeBkdY"
+AIO_KEY = "NHAP_KEY_VAO_DAY"
 
 # --- 2. THONG TIN KET NOI DATABASE ---
 DB_CONFIG = {
     'host': '127.0.0.1',
     'database': 'dadn_smarthome',
     'user': 'root',
-    'password': '123456' # Nhớ đổi pass nhé
+    'password': '123456' # Nhớ đổi pass tùy theo máy các ông nhé
 }
 
 # Khai báo các kênh dữ liệu
@@ -51,15 +51,14 @@ def message(client, feed_id, payload):
         try:
             cursor = conn.cursor()
             
-            # B1: Lấy id của feed dựa vào feed_name (Vd: bbc-temp -> id: 1)
+            # B1: Lấy id của feed dựa vào feed_name 
             cursor.execute("SELECT id FROM feeds WHERE feed_name = %s", (feed_id,))
             result = cursor.fetchone()
             
             if result:
                 db_feed_id = result[0]
                 
-                # B2: Lưu vào bảng sensor_data (nếu là cảm biến)
-                # Tạm thời lưu mọi thứ nhận được vào bảng này để test tính năng
+                # B2: Lưu vào bảng sensor_data 
                 insert_query = "INSERT INTO sensor_data (feed_id, value) VALUES (%s, %s)"
                 cursor.execute(insert_query, (db_feed_id, float(payload) if payload.replace('.','',1).isdigit() else payload))
                 conn.commit()
@@ -72,7 +71,7 @@ def message(client, feed_id, payload):
                 cursor.close()
                 conn.close()
 
-    # Kịch bản 1 (Hardcode tạm thời): Xử lý Nhiệt độ
+    # Kịch bản 1 : Xử lý Nhiệt độ
     if feed_id == "bbc-temp":
         try:
             nhiet_do = float(payload) 
@@ -90,10 +89,10 @@ def message(client, feed_id, payload):
 print("Dang khoi dong tram Gateway Python ...")
 
 client = MQTTClient(AIO_USERNAME, AIO_KEY)
-client.on_connect = connected # type: ignore
-client.on_disconnect = disconnected # type: ignore
-client.on_message = message # type: ignore
-client.on_subscribe = subscribe # type: ignore
+client.on_connect = connected
+client.on_disconnect = disconnected 
+client.on_message = message 
+client.on_subscribe = subscribe 
 
 client.connect()
 client.loop_background()

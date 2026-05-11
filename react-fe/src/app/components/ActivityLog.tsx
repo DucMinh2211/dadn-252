@@ -1,11 +1,10 @@
-import { useState } from 'react';
 import { FileText, Lightbulb, Wind, Thermometer, DoorOpen, Filter, Download, Calendar } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-
+import { useState, useEffect } from 'react';
 interface DeviceLog {
   id: string;
   device: string;
@@ -21,105 +20,56 @@ export function ActivityLog() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('today');
 
-  const [logs, setLogs] = useState<DeviceLog[]>([
-    {
-      id: '1',
-      device: 'Đèn phòng khách',
-      deviceType: 'light',
-      action: 'on',
-      user: 'Admin User',
-      time: '20:15',
-      date: 'Hôm nay',
-    },
-    {
-      id: '2',
-      device: 'Quạt phòng ngủ',
-      deviceType: 'fan',
-      action: 'on',
-      user: 'John Doe',
-      time: '19:30',
-      date: 'Hôm nay',
-      details: 'Tốc độ: Mức 3',
-    },
-    {
-      id: '3',
-      device: 'Đèn bếp',
-      deviceType: 'light',
-      action: 'off',
-      user: 'Tự động',
-      time: '18:45',
-      date: 'Hôm nay',
-    },
-    {
-      id: '4',
-      device: 'Cửa chính',
-      deviceType: 'door',
-      action: 'opened',
-      user: 'Jane Smith',
-      time: '18:30',
-      date: 'Hôm nay',
-      details: 'Mở bằng FaceID',
-    },
-    {
-      id: '5',
-      device: 'Điều hòa phòng khách',
-      deviceType: 'ac',
-      action: 'adjusted',
-      user: 'Admin User',
-      time: '17:20',
-      date: 'Hôm nay',
-      details: 'Nhiệt độ: 24°C',
-    },
-    {
-      id: '6',
-      device: 'Đèn phòng khách',
-      deviceType: 'light',
-      action: 'off',
-      user: 'Admin User',
-      time: '23:45',
-      date: 'Hôm qua',
-    },
-    {
-      id: '7',
-      device: 'Quạt phòng khách',
-      deviceType: 'fan',
-      action: 'off',
-      user: 'Tự động',
-      time: '23:30',
-      date: 'Hôm qua',
-      details: 'Tự động tắt khi nhiệt độ < 25°C',
-    },
-    {
-      id: '8',
-      device: 'Cửa chính',
-      deviceType: 'door',
-      action: 'opened',
-      user: 'John Doe',
-      time: '22:15',
-      date: 'Hôm qua',
-      details: 'Mở thủ công qua App',
-    },
-    {
-      id: '9',
-      device: 'Đèn phòng ngủ',
-      deviceType: 'light',
-      action: 'on',
-      user: 'Tự động',
-      time: '19:15',
-      date: 'Hôm qua',
-      details: 'Tự động bật khi phát hiện chuyển động',
-    },
-    {
-      id: '10',
-      device: 'Quạt bếp',
-      deviceType: 'fan',
-      action: 'on',
-      user: 'Jane Smith',
-      time: '12:30',
-      date: '2 ngày trước',
-      details: 'Tốc độ: Mức 2',
-    },
-  ]);
+  const [logs, setLogs] = useState<DeviceLog[]>([]);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/logs');
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+          const formattedLogs: DeviceLog[] = result.data.map((item: any, index: number) => {
+            const dateObj = new Date(item.created_at);
+            const timeStr = dateObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = dateObj.toLocaleDateString('vi-VN');
+
+            let deviceName = item.feed_name;
+            let type: 'light' | 'fan' | 'ac' | 'door' = 'light';
+            
+            if (item.feed_name === 'bbc-led') {
+              deviceName = 'Đèn chính'; 
+              type = 'light';
+            } else if (item.feed_name === 'bbc-fan') {
+              deviceName = 'Quạt làm mát'; 
+              type = 'fan';
+            }
+
+            let actionType: 'on' | 'off' = (item.action_value === '0' || item.action_value === 'OFF') ? 'off' : 'on';
+
+            return {
+              id: index.toString(),
+              device: deviceName,
+              deviceType: type,
+              action: actionType,
+              user: 'Người dùng', 
+              time: timeStr,
+              date: dateStr,
+            };
+          });
+
+          setLogs(formattedLogs);
+        }
+      } catch (error) {
+        console.error('Lỗi lấy log từ Backend:', error);
+      }
+    };
+
+    fetchLogs();
+    
+    const interval = setInterval(fetchLogs, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getDeviceIcon = (type: string) => {
     switch (type) {

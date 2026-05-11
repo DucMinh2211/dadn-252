@@ -18,44 +18,72 @@ export function Environmental() {
 
   // Mock historical data
   const [historyData, setHistoryData] = useState<EnvironmentData[]>([
-    { time: '00:00', temperature: 22, humidity: 60 },
-    { time: '04:00', temperature: 21, humidity: 62 },
-    { time: '08:00', temperature: 24, humidity: 58 },
-    { time: '12:00', temperature: 28, humidity: 55 },
-    { time: '16:00', temperature: 30, humidity: 52 },
-    { time: '20:00', temperature: 26, humidity: 58 },
-    { time: '24:00', temperature: 23, humidity: 63 },
+    
   ]);
 
   // Simulate real-time updates
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newTemp = 22 + Math.random() * 8;
-      const newHumidity = 50 + Math.random() * 20;
-      
-      setCurrentTemp(Number(newTemp.toFixed(1)));
-      setCurrentHumidity(Number(newHumidity.toFixed(0)));
+    const fetchRealData = async () => {
+      try {
+        const resLatest = await fetch('http://127.0.0.1:8000/api/sensor/latest');
+        const latestResult = await resLatest.json();
+        
+        if (latestResult.status === 'success') {
+          latestResult.data.forEach((item: any) => {
+            if (item.feed_name === 'bbc-temp') {
+              const tempVal = Number(item.value);
+              setCurrentTemp(tempVal);
+              
+              if (tempVal > 35) {
+                const alert = {
+                  id: String(Date.now()),
+                  message: `Cảnh báo: Nhiệt độ cao (${tempVal.toFixed(1)}°C)`,
+                  time: new Date(item.created_at).toLocaleTimeString('vi-VN'),
+                  type: 'danger' as const,
+                };
+                setAlerts(prev => {
+                  if (prev.length > 0 && prev[0].message === alert.message) return prev;
+                  return [alert, ...prev.slice(0, 3)];
+                });
+              }
+            }
+            if (item.feed_name === 'bbc-moist') setCurrentHumidity(Number(item.value));
+          });
+        }
 
-      // Check for dangerous temperature
-      if (newTemp > 40) {
-        const alert = {
-          id: String(Date.now()),
-          message: `Cảnh báo: Nhiệt độ vượt mức nguy hiểm (${newTemp.toFixed(1)}°C)`,
-          time: new Date().toLocaleTimeString('vi-VN'),
-          type: 'danger' as const,
-        };
-        setAlerts(prev => [alert, ...prev.slice(0, 4)]);
-      } else if (newTemp > 35) {
-        const alert = {
-          id: String(Date.now()),
-          message: `Cảnh báo: Nhiệt độ cao (${newTemp.toFixed(1)}°C)`,
-          time: new Date().toLocaleTimeString('vi-VN'),
-          type: 'warning' as const,
-        };
-        setAlerts(prev => [alert, ...prev.slice(0, 4)]);
+        const resHistory = await fetch('http://127.0.0.1:8000/api/sensor/history');
+        const historyResult = await resHistory.json();
+
+        if (historyResult.status === 'success') {
+           const groupedData: Record<string, any> = {};
+
+           const reversedData = [...historyResult.data].reverse();
+
+           reversedData.forEach((item: any) => {
+              // Lấy mốc thời gian (Giờ:Phút)
+              const timeStr = new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+              
+              if (!groupedData[timeStr]) {
+                groupedData[timeStr] = { time: timeStr };
+              }
+
+              if (item.feed_name === 'bbc-temp') {
+                groupedData[timeStr].temperature = Number(item.value);
+              } else if (item.feed_name === 'bbc-moist') {
+                groupedData[timeStr].humidity = Number(item.value);
+              }
+           });
+
+           setHistoryData(Object.values(groupedData));
+        }
+
+      } catch (error) {
+        console.error('Lỗi kết nối Backend:', error);
       }
-    }, 5000);
+    };
 
+    fetchRealData();
+    const interval = setInterval(fetchRealData, 3000);
     return () => clearInterval(interval);
   }, []);
 
