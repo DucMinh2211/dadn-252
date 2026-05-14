@@ -12,15 +12,15 @@ export function Climate() {
   const [currentTemp, setCurrentTemp] = useState(25);
   const [targetTemp, setTargetTemp] = useState(30);
   const [fanSpeed, setFanSpeed] = useState(0);
-
   const [selectedRoom, setSelectedRoom] = useState('Living Room');
+
   const prevAutoState = useRef<boolean | null>(null);
 
   const rooms = [
     { name: 'Living Room', temp: currentTemp, fan: fanSpeed },
-    { name: 'Bedroom', temp: 27, fan: 0 },
-    { name: 'Kitchen', temp: 32, fan: 100 },
-    { name: 'Office', temp: 24, fan: 0 }
+    { name: 'Bedroom', temp: 27, fan: 80 },
+    { name: 'Kitchen', temp: 31.5, fan: 100 },
+    { name: 'Office', temp: 24.8, fan: 0 }
   ];
 
   const sendFanCommand = async (speedVal: string) => {
@@ -37,26 +37,33 @@ export function Climate() {
     }
   };
 
+  // Fetch nhiệt độ từ Adafruit định kỳ
   useEffect(() => {
     const fetchTemp = async () => {
       try {
         const res = await fetch('http://127.0.0.1:8000/api/sensor/latest');
         const result = await res.json();
+
         if (result.status === 'success') {
           result.data.forEach((item: any) => {
             if (item.feed_name === 'bbc-temp') setCurrentTemp(Number(item.value));
           });
         }
-      } catch { console.log('Đang chờ dữ liệu...'); }
+      } catch {
+        console.log('Đang chờ dữ liệu...');
+      }
     };
+
     fetchTemp();
     const interval = setInterval(fetchTemp, 3000);
     return () => clearInterval(interval);
   }, []);
 
+  // Chế độ AUTO: Tự bật quạt nếu nóng hơn nhiệt độ mục tiêu
   useEffect(() => {
     if (isSystemActive && mode === 'auto' && selectedRoom === 'Living Room') {
       const shouldFanBeOn = currentTemp > targetTemp;
+
       if (prevAutoState.current !== shouldFanBeOn) {
         const speedVal = shouldFanBeOn ? '100' : '0';
         sendFanCommand(speedVal);
@@ -66,6 +73,7 @@ export function Climate() {
     }
   }, [currentTemp, targetTemp, isSystemActive, mode, selectedRoom]);
 
+  // Chế độ MANUAL: Debounce gửi lệnh để tránh spam API
   useEffect(() => {
     if (isSystemActive && mode === 'manual' && selectedRoom === 'Living Room') {
       const timer = setTimeout(() => {
@@ -74,6 +82,15 @@ export function Climate() {
       return () => clearTimeout(timer);
     }
   }, [fanSpeed, mode, isSystemActive, selectedRoom]);
+
+  const handleSystemToggle = (checked: boolean) => {
+    setIsSystemActive(checked);
+    if (!checked) {
+      sendFanCommand('0');
+      setFanSpeed(0);
+      prevAutoState.current = false;
+    }
+  };
 
   return (
     <div className="p-8">
@@ -84,20 +101,24 @@ export function Climate() {
           </h2>
           <p className="text-gray-500">Multi-room Temperature Management</p>
         </div>
+
         <div className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border">
           <Power className={`w-5 h-5 ${isSystemActive ? 'text-green-500' : 'text-gray-400'}`} />
           <span className="font-semibold">{isSystemActive ? 'System ON' : 'System OFF'}</span>
-          <Switch checked={isSystemActive} onCheckedChange={(c) => { setIsSystemActive(c); if(!c) sendFanCommand('0'); }} />
+          <Switch checked={isSystemActive} onCheckedChange={handleSystemToggle} />
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* BÊN TRÁI: DANH SÁCH PHÒNG */}
         <div className="space-y-4">
           {rooms.map((room) => (
             <Card
               key={room.name}
               onClick={() => setSelectedRoom(room.name)}
-              className={`p-6 cursor-pointer transition-all ${selectedRoom === room.name ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'hover:shadow-lg'}`}
+              className={`p-6 cursor-pointer transition-all ${
+                selectedRoom === room.name ? 'ring-2 ring-cyan-500 bg-cyan-50' : 'hover:shadow-lg'
+              }`}
             >
               <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
                 <Fan className={`w-6 h-6 ${room.fan > 0 ? 'animate-spin text-cyan-500' : 'text-gray-400'}`} />
@@ -107,22 +128,29 @@ export function Climate() {
                 <span className="text-5xl font-bold">{room.temp}</span>
                 <span className="text-xl">°C</span>
               </div>
+              <div className="mt-4 text-sm bg-slate-100 p-3 rounded-md">
+                Fan Status: {room.fan > 0 ? `Running (${room.fan}%)` : 'Stopped'}
+              </div>
             </Card>
           ))}
         </div>
 
+        {/* BÊN PHẢI: BẢNG ĐIỀU KHIỂN */}
         <Card className={`p-6 ${!isSystemActive ? 'opacity-50 pointer-events-none' : ''}`}>
           <h3 className="text-xl font-semibold mb-4">Control Panel - {selectedRoom}</h3>
+          
           {selectedRoom === 'Living Room' ? (
             <Tabs value={mode} onValueChange={(v) => setMode(v as 'auto' | 'manual')}>
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="auto">AUTO</TabsTrigger>
                 <TabsTrigger value="manual">MANUAL</TabsTrigger>
               </TabsList>
+              
               <TabsContent value="auto" className="space-y-4">
-                <p className="font-medium">Target: {targetTemp}°C</p>
+                <p className="font-medium">Target Temperature: {targetTemp}°C</p>
                 <Slider value={[targetTemp]} onValueChange={(v) => setTargetTemp(v[0])} min={20} max={40} />
               </TabsContent>
+              
               <TabsContent value="manual" className="space-y-4">
                 <p className="font-medium">Fan Speed: {fanSpeed}%</p>
                 <Slider value={[fanSpeed]} onValueChange={(v) => setFanSpeed(v[0])} min={0} max={100} step={10} />
