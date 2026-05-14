@@ -24,7 +24,7 @@ DB_CONFIG = {
 }
 
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "aio_mKBd37ammL8wtWoEEqZiQ6Q6sXQh" 
+AIO_KEY = "tu dien key"
 
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)

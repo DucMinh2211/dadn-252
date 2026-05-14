@@ -1,6 +1,6 @@
 from Adafruit_IO import Client
 
-aio = Client("DucMinh2211", "aio_mKBd37ammL8wtWoEEqZiQ6Q6sXQh")
+aio = Client("DucMinh2211", "tu dien key")
 
 aio.send("bbc-temp", 99)
 

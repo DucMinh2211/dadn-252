@@ -4,7 +4,7 @@ from Adafruit_IO import MQTTClient
 
 # --- ĐIỀN THÔNG TIN CỦA NHÓM VÀO ĐÂY ---
 AIO_USERNAME = "DucMinh2211"
-AIO_KEY = "aio_mKBd37ammL8wtWoEEqZiQ6Q6sXQh" 
+AIO_KEY = "tu dien key" 
 
 def connected(client):
     print("✅ Đã kết nối thành công mây Adafruit (Module AI Giả Lập)!")
