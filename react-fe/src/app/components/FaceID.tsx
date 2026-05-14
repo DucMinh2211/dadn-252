@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserCheck, UserPlus, Trash2, DoorOpen, Lock, Unlock, Camera, Shield } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -17,11 +17,12 @@ interface FaceMember {
   accessCount: number;
 }
 
+// Bổ sung thêm hành động 'locked' cho Nhật ký
 interface AccessLog {
   id: string;
   personName: string;
   personId: string | null;
-  action: 'opened' | 'denied';
+  action: 'opened' | 'denied' | 'locked';
   time: string;
   date: string;
   method: 'face' | 'manual' | 'unknown';
@@ -32,98 +33,89 @@ export function FaceID() {
   const [faceRecognition, setFaceRecognition] = useState(true);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
 
+  const lastFaceValueRef = useRef<string>('');
+
   const [members, setMembers] = useState<FaceMember[]>([
-    {
-      id: '1',
-      name: 'Admin User',
-      relationship: 'Chủ nhà',
-      image: 'AU',
-      addedDate: '2024-01-15',
-      accessCount: 45,
-    },
-    {
-      id: '2',
-      name: 'John Doe',
-      relationship: 'Thành viên',
-      image: 'JD',
-      addedDate: '2024-02-20',
-      accessCount: 32,
-    },
-    {
-      id: '3',
-      name: 'Jane Smith',
-      relationship: 'Thành viên',
-      image: 'JS',
-      addedDate: '2024-03-01',
-      accessCount: 18,
-    },
+    { id: '1', name: 'Admin User', relationship: 'Chủ nhà', image: 'AU', addedDate: '2024-01-15', accessCount: 45 },
+    { id: '2', name: 'Thắng', relationship: 'Thành viên', image: 'TH', addedDate: '2024-02-20', accessCount: 32 },
   ]);
 
   const [accessLogs, setAccessLogs] = useState<AccessLog[]>([
-    {
-      id: '1',
-      personName: 'Admin User',
-      personId: '1',
-      action: 'opened',
-      time: '08:30',
-      date: 'Hôm nay',
-      method: 'face',
-    },
-    {
-      id: '2',
-      personName: 'John Doe',
-      personId: '2',
-      action: 'opened',
-      time: '18:15',
-      date: 'Hôm qua',
-      method: 'face',
-    },
-    {
-      id: '3',
-      personName: 'Admin User',
-      personId: '1',
-      action: 'opened',
-      time: '22:30',
-      date: 'Hôm qua',
-      method: 'manual',
-    },
-    {
-      id: '4',
-      personName: 'Người lạ',
-      personId: null,
-      action: 'denied',
-      time: '03:15',
-      date: '2 ngày trước',
-      method: 'unknown',
-    },
-    {
-      id: '5',
-      personName: 'Jane Smith',
-      personId: '3',
-      action: 'opened',
-      time: '17:45',
-      date: '2 ngày trước',
-      method: 'face',
-    },
+    { id: '1', personName: 'Admin User', personId: '1', action: 'opened', time: '08:30', date: 'Hôm nay', method: 'face' }
   ]);
 
-  const handleUnlockDoor = () => {
-    setDoorLocked(false);
+  useEffect(() => {
+    const fetchSensorData = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/sensor/latest');
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+          result.data.forEach((item: any) => {
+            if (item.feed_name === 'bbc-door') {
+              setDoorLocked(item.value === '0');
+            }
+            
+            if (item.feed_name === 'bbc-faceai' && faceRecognition) {
+              const currentFace = item.value;
+              
+              if (currentFace !== lastFaceValueRef.current && currentFace !== '') {
+                lastFaceValueRef.current = currentFace; 
+                
+                const isKnown = currentFace !== 'UNKNOWN';
+                
+                const newLog: AccessLog = {
+                  id: String(Date.now()),
+                  personName: isKnown ? currentFace : 'Người lạ (UNKNOWN)',
+                  personId: isKnown ? '2' : null,
+                  action: isKnown ? 'opened' : 'denied',
+                  time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                  date: 'Vừa xong',
+                  method: 'face',
+                };
+                
+                setAccessLogs(prevLogs => [newLog, ...prevLogs]);
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Lỗi đồng bộ cảm biến:', error);
+      }
+    };
+
+    fetchSensorData();
+    // Đã tăng lên 8 giây (8000ms) để hệ thống nhẹ nhàng, không bị báo lỗi 500 nữa
+    const interval = setInterval(fetchSensorData, 8000);
+    return () => clearInterval(interval);
+  }, [faceRecognition]);
+
+  // HÀM ĐIỀU KHIỂN CỬA BẰNG APP (Công tắc Bật/Tắt)
+  const handleToggleDoor = async () => {
+    const isUnlocking = doorLocked; // Ghi nhớ hành động (Đang khóa thì là Mở, Đang mở thì là Khóa)
+    setDoorLocked(!isUnlocking); // Cập nhật giao diện UI ngay lập tức cho mượt
+    
+    try {
+      await fetch('http://127.0.0.1:8000/api/device-control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feed_name: 'bbc-door', value: isUnlocking ? '1' : '0' })
+      });
+    } catch (error) {
+      console.error('Lỗi điều khiển cửa:', error);
+    }
+
+    // Ghi log ra vào
     const log: AccessLog = {
       id: String(Date.now()),
-      personName: 'Admin User',
+      personName: isUnlocking ? 'Chủ nhà (Mở cửa)' : 'Chủ nhà (Khóa cửa)',
       personId: '1',
-      action: 'opened',
+      action: isUnlocking ? 'opened' : 'locked',
       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
       date: 'Vừa xong',
       method: 'manual',
     };
-    setAccessLogs([log, ...accessLogs]);
-    
-    // Auto lock after 5 seconds
-    setTimeout(() => {
-      setDoorLocked(true);
-    }, 5000);
+    setAccessLogs(prev => [log, ...prev]);
   };
 
   const handleDeleteMember = (id: string) => {
@@ -140,7 +132,6 @@ export function FaceID() {
         <p className="text-gray-500">Quản lý thành viên và kiểm soát ra vào bằng AI</p>
       </div>
 
-      {/* Door Control */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -148,7 +139,7 @@ export function FaceID() {
               <h3 className="text-xl font-semibold mb-1">Trạng thái cửa</h3>
               <p className="text-sm text-gray-500">Điều khiển cửa chính từ xa</p>
             </div>
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors duration-500 ${
               doorLocked ? 'bg-red-500' : 'bg-green-500'
             }`}>
               {doorLocked ? (
@@ -160,19 +151,19 @@ export function FaceID() {
           </div>
           
           <div className="mb-4">
-            <Badge className={`text-lg px-4 py-2 ${doorLocked ? 'bg-red-500' : 'bg-green-500'}`}>
+            <Badge className={`text-lg px-4 py-2 transition-colors duration-500 ${doorLocked ? 'bg-red-500' : 'bg-green-500'}`}>
               {doorLocked ? 'Đã khóa' : 'Đã mở'}
             </Badge>
           </div>
 
           <Button 
-            onClick={handleUnlockDoor}
-            disabled={!doorLocked}
-            className="w-full"
+            onClick={handleToggleDoor}
+            // Nếu đang khóa thì nút màu tím, nếu đang mở thì nút tự chuyển sang màu đỏ cảnh báo
+            className={`w-full ${doorLocked ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-500 hover:bg-rose-600'} text-white`}
             size="lg"
           >
-            <DoorOpen className="w-5 h-5 mr-2" />
-            {doorLocked ? 'Mở cửa thủ công' : 'Đang mở...'}
+            {doorLocked ? <DoorOpen className="w-5 h-5 mr-2" /> : <Lock className="w-5 h-5 mr-2" />}
+            {doorLocked ? 'Mở cửa thủ công' : 'Khóa cửa thủ công'}
           </Button>
         </Card>
 
@@ -180,7 +171,7 @@ export function FaceID() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-xl font-semibold mb-1">Nhận diện khuôn mặt</h3>
-              <p className="text-sm text-gray-500">Tự động mở cửa khi nhận diện</p>
+              <p className="text-sm text-gray-500">Hệ thống Edge AI tại cửa</p>
             </div>
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
               faceRecognition ? 'bg-indigo-500' : 'bg-gray-400'
@@ -191,8 +182,8 @@ export function FaceID() {
 
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
             <div>
-              <p className="font-medium">Kích hoạt FaceID</p>
-              <p className="text-sm text-gray-500">Nhận diện tự động</p>
+              <p className="font-medium">Trạng thái AI</p>
+              <p className="text-sm text-gray-500">Camera đang hoạt động độc lập</p>
             </div>
             <Switch 
               checked={faceRecognition}
@@ -202,146 +193,10 @@ export function FaceID() {
         </Card>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Thành viên</p>
-              <p className="text-2xl font-semibold">{members.length}</p>
-            </div>
-            <UserCheck className="w-10 h-10 text-indigo-500" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Truy cập hôm nay</p>
-              <p className="text-2xl font-semibold">
-                {accessLogs.filter(l => l.date === 'Hôm nay').length}
-              </p>
-            </div>
-            <DoorOpen className="w-10 h-10 text-green-500" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Truy cập bị từ chối</p>
-              <p className="text-2xl font-semibold text-red-600">
-                {accessLogs.filter(l => l.action === 'denied').length}
-              </p>
-            </div>
-            <Shield className="w-10 h-10 text-red-500" />
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">FaceID</p>
-              <Badge className={faceRecognition ? 'bg-green-500' : 'bg-gray-400'}>
-                {faceRecognition ? 'Bật' : 'Tắt'}
-              </Badge>
-            </div>
-            <Camera className="w-10 h-10 text-purple-500" />
-          </div>
-        </Card>
-      </div>
-
-      {/* Members Management */}
-      <Card className="p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-indigo-500" />
-            Quản lý thành viên
-          </h3>
-          <Dialog open={isAddMemberOpen} onOpenChange={setIsAddMemberOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Thêm thành viên
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Thêm thành viên mới</DialogTitle>
-                <DialogDescription>
-                  Thêm khuôn mặt thành viên gia đình để tự động mở cửa.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div>
-                  <Label htmlFor="member-name">Tên thành viên</Label>
-                  <Input
-                    id="member-name"
-                    placeholder="Nhập tên"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="relationship">Quan hệ</Label>
-                  <Input
-                    id="relationship"
-                    placeholder="VD: Con trai, Con gái..."
-                  />
-                </div>
-                <div>
-                  <Label>Chụp khuôn mặt</Label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                    <Camera className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">Nhấn để chụp ảnh khuôn mặt</p>
-                  </div>
-                </div>
-                <Button className="w-full">Thêm thành viên</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {members.map(member => (
-            <Card key={member.id} className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                  {member.image}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-semibold">{member.name}</h4>
-                  <p className="text-sm text-gray-500">{member.relationship}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Số lần truy cập:</span>
-                  <span className="font-medium">{member.accessCount}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Ngày thêm:</span>
-                  <span className="font-medium">{member.addedDate}</span>
-                </div>
-              </div>
-
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => handleDeleteMember(member.id)}
-              >
-                <Trash2 className="w-4 h-4 mr-2 text-red-600" />
-                Xóa
-              </Button>
-            </Card>
-          ))}
-        </div>
-      </Card>
-
-      {/* Access Logs */}
       <Card className="p-6">
         <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
           <DoorOpen className="w-5 h-5 text-green-500" />
-          Nhật ký ra vào
+          Nhật ký ra vào trực tuyến
         </h3>
 
         <div className="space-y-3">
@@ -349,13 +204,15 @@ export function FaceID() {
             <div 
               key={log.id}
               className={`p-4 rounded-lg border ${
-                log.action === 'opened' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                log.action === 'opened' ? 'bg-green-50 border-green-200' : 
+                log.action === 'locked' ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    log.action === 'opened' ? 'bg-green-500' : 'bg-red-500'
+                    log.action === 'opened' ? 'bg-green-500' : 
+                    log.action === 'locked' ? 'bg-blue-500' : 'bg-red-500'
                   } text-white`}>
                     {log.action === 'opened' ? (
                       <DoorOpen className="w-5 h-5" />
@@ -372,12 +229,11 @@ export function FaceID() {
                       {log.method === 'manual' && (
                         <Badge className="bg-blue-500">Thủ công</Badge>
                       )}
-                      {log.method === 'unknown' && (
-                        <Badge className="bg-red-500">Không xác định</Badge>
-                      )}
                     </div>
                     <p className="text-sm text-gray-600">
-                      {log.action === 'opened' ? 'Đã mở cửa' : 'Bị từ chối'}
+                      {log.action === 'opened' ? 'Đã mở cửa thành công' : 
+                       log.action === 'locked' ? 'Đã khóa cửa an toàn' : 
+                       'Bị từ chối truy cập! Cảnh báo an ninh!'}
                     </p>
                   </div>
                 </div>

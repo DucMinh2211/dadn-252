@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Zap, Plus, Trash2, Edit, Clock, Lightbulb, Wind, Thermometer, Activity } from 'lucide-react';
 import { Card } from './ui/card';
 import { Switch } from './ui/switch';
@@ -29,73 +29,66 @@ interface Schedule {
 }
 
 export function Automation() {
-  const [automations, setAutomations] = useState<Automation[]>([
-    {
-      id: '1',
-      name: 'Bật đèn khi tối',
-      trigger: 'Phát hiện chuyển động + thiếu sáng',
-      action: 'Bật đèn phòng khách',
-      enabled: true,
-      description: 'Tự động bật đèn khi có người và trời tối',
-    },
-    {
-      id: '2',
-      name: 'Tự động làm mát',
-      trigger: 'Nhiệt độ > 30°C',
-      action: 'Bật quạt tối đa',
-      enabled: true,
-      description: 'Bật quạt khi nhiệt độ vượt ngưỡng',
-    },
-    {
-      id: '3',
-      name: 'Tắt quạt khi mát',
-      trigger: 'Nhiệt độ < 25°C',
-      action: 'Tắt quạt',
-      enabled: true,
-      description: 'Tắt quạt khi nhiệt độ giảm xuống',
-    },
-    {
-      id: '4',
-      name: 'Chế độ đi ngủ',
-      trigger: '22:00 hàng ngày',
-      action: 'Tắt tất cả đèn trừ đèn ngủ',
-      enabled: false,
-      description: 'Tự động tắt đèn vào giờ đi ngủ',
-    },
-  ]);
-
-  const [schedules, setSchedules] = useState<Schedule[]>([
-    {
-      id: '1',
-      device: 'Đèn phòng khách',
-      deviceType: 'light',
-      action: 'on',
-      time: '18:00',
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-      enabled: true,
-    },
-    {
-      id: '2',
-      device: 'Đèn phòng khách',
-      deviceType: 'light',
-      action: 'off',
-      time: '23:00',
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      enabled: true,
-    },
-    {
-      id: '3',
-      device: 'Quạt phòng ngủ',
-      deviceType: 'fan',
-      action: 'on',
-      time: '22:00',
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      enabled: true,
-    },
-  ]);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isScheduleDialogOpen, setIsScheduleDialogOpen] = useState(false);
+
+  // HÀM LÀM MỚI DỮ LIỆU KHI CHUYỂN TAB
+  useEffect(() => {
+    const defaultAutomations: Automation[] = [
+      {
+        id: '1',
+        name: 'Bật đèn khi tối',
+        trigger: 'Phát hiện đã tới buổi tối',
+        action: 'Bật đèn ngoài hiên',
+        enabled: true,
+        description: 'Tự động bật đèn khi trời tối',
+      },
+      {
+        id: '2',
+        name: 'Tự động làm mát',
+        trigger: 'Nhiệt độ > 30°C',
+        action: 'Bật quạt tối đa',
+        enabled: true,
+        description: 'Bật quạt khi nhiệt độ vượt ngưỡng',
+      },
+      {
+        id: '3',
+        name: 'Chế độ đi ngủ',
+        trigger: '22:00 hàng ngày',
+        action: 'Tắt tất cả đèn trừ đèn ngủ',
+        enabled: false,
+        description: 'Tự động tắt đèn vào giờ đi ngủ',
+      },
+    ];
+
+    const defaultSchedules: Schedule[] = [
+      {
+        id: '1',
+        device: 'Đèn phòng khách',
+        deviceType: 'light',
+        action: 'on',
+        time: '18:00',
+        days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+        enabled: true,
+      },
+      {
+        id: '2',
+        device: 'Đèn phòng khách',
+        deviceType: 'light',
+        action: 'off',
+        time: '23:00',
+        days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        enabled: true,
+      },
+    ];
+
+    setAutomations(defaultAutomations);
+    setSchedules(defaultSchedules);
+    console.log("Tab Tự động hóa đã được làm mới!");
+  }, []);
 
   const toggleAutomation = (id: string) => {
     setAutomations(automations.map(a => 
@@ -112,7 +105,7 @@ export function Automation() {
   const deleteAutomation = (id: string) => {
     setAutomations(automations.filter(a => a.id !== id));
   };
-
+  
   const deleteSchedule = (id: string) => {
     setSchedules(schedules.filter(s => s.id !== id));
   };
@@ -207,17 +200,12 @@ export function Automation() {
               <div className="space-y-4 pt-4">
                 <div>
                   <Label htmlFor="rule-name">Tên quy tắc</Label>
-                  <Input
-                    id="rule-name"
-                    placeholder="VD: Bật đèn khi tối"
-                  />
+                  <Input id="rule-name" placeholder="VD: Bật đèn khi tối" />
                 </div>
                 <div>
                   <Label htmlFor="trigger">Điều kiện kích hoạt</Label>
                   <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn điều kiện" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Chọn điều kiện" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="motion">Phát hiện chuyển động</SelectItem>
                       <SelectItem value="temp">Nhiệt độ vượt ngưỡng</SelectItem>
@@ -229,9 +217,7 @@ export function Automation() {
                 <div>
                   <Label htmlFor="action">Hành động</Label>
                   <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn hành động" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Chọn hành động" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="light-on">Bật đèn</SelectItem>
                       <SelectItem value="light-off">Tắt đèn</SelectItem>
@@ -248,15 +234,10 @@ export function Automation() {
 
         <div className="space-y-4">
           {automations.map(automation => (
-            <div 
-              key={automation.id}
-              className={`p-4 rounded-lg border ${automation.enabled ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}
-            >
+            <div key={automation.id} className={`p-4 rounded-lg border ${automation.enabled ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    automation.enabled ? 'bg-purple-500' : 'bg-gray-400'
-                  } text-white`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${automation.enabled ? 'bg-purple-500' : 'bg-gray-400'} text-white`}>
                     <Zap className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
@@ -268,25 +249,14 @@ export function Automation() {
                     </div>
                     <p className="text-sm text-gray-600 mb-2">{automation.description}</p>
                     <div className="flex items-center gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-500">Khi:</span> <span className="font-medium">{automation.trigger}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">→ Thì:</span> <span className="font-medium">{automation.action}</span>
-                      </div>
+                      <div><span className="text-gray-500">Khi:</span> <span className="font-medium">{automation.trigger}</span></div>
+                      <div><span className="text-gray-500">→ Thì:</span> <span className="font-medium">{automation.action}</span></div>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch 
-                    checked={automation.enabled}
-                    onCheckedChange={() => toggleAutomation(automation.id)}
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => deleteAutomation(automation.id)}
-                  >
+                  <Switch checked={automation.enabled} onCheckedChange={() => toggleAutomation(automation.id)} />
+                  <Button variant="outline" size="sm" onClick={() => deleteAutomation(automation.id)}>
                     <Trash2 className="w-4 h-4 text-red-600" />
                   </Button>
                 </div>
@@ -300,30 +270,22 @@ export function Automation() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-xl font-semibold flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-500" />
-            Lịch hẹn giờ
+            <Clock className="w-5 h-5 text-blue-500" /> Lịch hẹn giờ
           </h3>
           <Dialog open={isScheduleDialogOpen} onOpenChange={setIsScheduleDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4 mr-2" />
-                Thêm lịch
-              </Button>
+              <Button><Plus className="w-4 h-4 mr-2" /> Thêm lịch</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Thêm lịch hẹn giờ</DialogTitle>
-                <DialogDescription>
-                  Đặt lịch tự động bật/tắt thiết bị theo giờ.
-                </DialogDescription>
+                <DialogDescription>Đặt lịch tự động bật/tắt thiết bị theo giờ.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div>
                   <Label htmlFor="schedule-device">Thiết bị</Label>
                   <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn thiết bị" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Chọn thiết bị" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="light1">Đèn phòng khách</SelectItem>
                       <SelectItem value="light2">Đèn phòng ngủ</SelectItem>
@@ -335,9 +297,7 @@ export function Automation() {
                 <div>
                   <Label htmlFor="schedule-action">Hành động</Label>
                   <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn hành động" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Chọn hành động" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="on">Bật</SelectItem>
                       <SelectItem value="off">Tắt</SelectItem>
@@ -346,11 +306,7 @@ export function Automation() {
                 </div>
                 <div>
                   <Label htmlFor="schedule-time">Thời gian</Label>
-                  <Input
-                    id="schedule-time"
-                    type="time"
-                    defaultValue="18:00"
-                  />
+                  <Input id="schedule-time" type="time" defaultValue="18:00" />
                 </div>
                 <Button className="w-full">Tạo lịch</Button>
               </div>
@@ -360,15 +316,10 @@ export function Automation() {
 
         <div className="space-y-4">
           {schedules.map(schedule => (
-            <div 
-              key={schedule.id}
-              className={`p-4 rounded-lg border ${schedule.enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}
-            >
+            <div key={schedule.id} className={`p-4 rounded-lg border ${schedule.enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    schedule.enabled ? 'bg-blue-500' : 'bg-gray-400'
-                  } text-white`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${schedule.enabled ? 'bg-blue-500' : 'bg-gray-400'} text-white`}>
                     {getDeviceIcon(schedule.deviceType)}
                   </div>
                   <div className="flex-1">
@@ -380,29 +331,19 @@ export function Automation() {
                     </div>
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4 text-blue-600" />
-                        <span className="font-medium">{schedule.time}</span>
+                        <Clock className="w-4 h-4 text-blue-600" /> <span className="font-medium">{schedule.time}</span>
                       </div>
                       <div className="flex gap-1">
                         {schedule.days.map(day => (
-                          <span key={day} className="px-2 py-1 bg-blue-100 rounded text-xs">
-                            {day}
-                          </span>
+                          <span key={day} className="px-2 py-1 bg-blue-100 rounded text-xs">{day}</span>
                         ))}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch 
-                    checked={schedule.enabled}
-                    onCheckedChange={() => toggleSchedule(schedule.id)}
-                  />
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => deleteSchedule(schedule.id)}
-                  >
+                  <Switch checked={schedule.enabled} onCheckedChange={() => toggleSchedule(schedule.id)} />
+                  <Button variant="outline" size="sm" onClick={() => deleteSchedule(schedule.id)}>
                     <Trash2 className="w-4 h-4 text-red-600" />
                   </Button>
                 </div>
